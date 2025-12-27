@@ -1,0 +1,51 @@
+# === Maven build ===
+/target/
+/pom.xml.tag
+/pom.xml.releaseBackup
+/pom.xml.versionsBackup
+/logs/
+*.log
+
+# === IntelliJ IDEA ===
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# === Eclipse ===
+.classpath
+.project
+.settings/
+
+# === VS Code ===
+.vscode/
+
+# === OS-specific ===
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Java ===
+*.class
+*.jar
+*.war
+*.ear
+
+# === Test artifacts ===
+/target/test-contacts.csv
+/target/repo-test.csv
+
+# === Backup files ===
+*~
+*.bak
+*.swp
+
+/.idea/
+/.vscode/
+/*.iml

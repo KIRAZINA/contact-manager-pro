@@ -72,7 +72,7 @@ public final class ConsoleView {
                 .map(PhoneNumber::new)
                 .collect(Collectors.toList());
 
-        System.out.print("Електронні листи (через кому): ");
+        System.out.print("Emails (separated by commas): ");
         String emailsRaw = scanner.nextLine();
         List<Email> emails = Arrays.stream(emailsRaw.split(","))
                 .map(String::trim)
@@ -102,7 +102,7 @@ public final class ConsoleView {
     private void listContacts() {
         List<Contact> contacts = controller.listContacts();
         if (contacts.isEmpty()) {
-            System.out.println("No contacts");
+            System.out.println("\uD83D\uDCED No contacts to display");
             return;
         }
         contacts.forEach(c -> {
@@ -125,19 +125,19 @@ public final class ConsoleView {
     }
 
     private void deleteContact() {
-        System.out.print("Contact ID to delete: ");
+        System.out.print("Enter contact ID to delete: ");
         String idRaw = scanner.nextLine();
         try {
             UUID id = UUID.fromString(idRaw);
             Optional<Contact> c = controller.getContact(id);
             if (c.isPresent()) {
                 controller.deleteContact(c.get());
-                System.out.println("Contact deleted");
+                System.out.println("✅ Contact deleted (ID: \" + id + \")");
             } else {
-                System.out.println("Contact not found");
+                System.out.println("⚠\uFE0F No contact found with this ID");
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("Incorrect UUID");
+            System.out.println("❌ Invalid UUID format");
         }
     }
 

@@ -182,6 +182,8 @@ public final class ConsoleView {
         } else {
             System.out.println("No commands for undo");
         }
+        System.out.println("Undo stack size: " + controller.getUndoStackSize());
+        System.out.println("Redo stack size: " + controller.getRedoStackSize());
     }
 
     private void redo() {
@@ -191,5 +193,8 @@ public final class ConsoleView {
         } else {
             System.out.println("No commands for redo");
         }
+        System.out.println("Undo stack size: " + controller.getUndoStackSize());
+        System.out.println("Redo stack size: " + controller.getRedoStackSize());
     }
+
 }

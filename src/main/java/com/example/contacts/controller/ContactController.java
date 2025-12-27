@@ -17,6 +17,7 @@ public final class ContactController {
 
     private final ContactService service;
 
+
     public ContactController(ContactService service) {
         this.service = service;
     }
@@ -55,21 +56,10 @@ public final class ContactController {
 
     // ---------- Undo/Redo ----------
 
-    public void undo() {
-        service.undo();
-    }
-
-    public void redo() {
-        service.redo();
-    }
-
-    public boolean canUndo() {
-        return service.canUndo();
-    }
-
-    public boolean canRedo() {
-        return service.canRedo();
-    }
+    public void undo() { service.undo(); }
+    public void redo() { service.redo(); }
+    public boolean canUndo() { return service.canUndo(); }
+    public boolean canRedo() { return service.canRedo(); }
 
     // ---------- Search / filter / sort ----------
 
@@ -104,4 +94,8 @@ public final class ContactController {
     public void flush() {
         service.flush();
     }
+
+    public int getUndoStackSize() { return service.getUndoStackSize(); }
+    public int getRedoStackSize() { return service.getRedoStackSize(); }
+
 }

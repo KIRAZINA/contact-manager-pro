@@ -121,4 +121,13 @@ public final class ContactService {
     public void flush() {
         repo.flush();
     }
+
+    public int getUndoStackSize() {
+        return commandManager.getUndoStackSize();
+    }
+
+    public int getRedoStackSize() {
+        return commandManager.getRedoStackSize();
+    }
+
 }

@@ -75,13 +75,15 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized List<Contact> findAll() {
         ensureLoaded();
-        return new ArrayList<>(byId.values());
+        return Collections.unmodifiableList(new ArrayList<>(byId.values()));
     }
 
     @Override
     public synchronized List<Contact> findWhere(Predicate<Contact> predicate) {
         ensureLoaded();
-        return byId.values().stream().filter(predicate).collect(Collectors.toList());
+        return byId.values().stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -114,9 +116,15 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized Contact save(Contact contact) {
         ensureLoaded();
+        if (byId.containsKey(contact.getId())) {
+            // Update existing contact
+            byId.put(contact.getId(), contact);
+            return contact;
+        }
         byId.put(contact.getId(), contact);
         return contact;
     }
+
 
     @Override
     public synchronized boolean deleteById(UUID id) {
@@ -152,6 +160,7 @@ public final class FileContactRepository implements ContactRepository {
                 newMap.put(c.getId(), c);
             }
         } catch (IOException e) {
+            System.err.println("❌ Error reading repository file: " + file + " | " + e.getMessage());
             throw new RuntimeException("Repository read error: " + file, e);
         }
         synchronized (this) {

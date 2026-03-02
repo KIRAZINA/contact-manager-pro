@@ -94,17 +94,81 @@ public final class JsonUtil {
         String json = sb.toString().trim();
         if (json.isEmpty() || json.equals("[]")) return List.of();
 
-        // A very simple parser: we separate objects by “},{” (does not support nesting).
-        String[] objects = json.substring(1, json.length() - 1).split("},\\s*\\{");
+        // Parse objects considering nested braces (handles arrays and nested objects)
+        List<String> objects = splitJsonObjects(json.substring(1, json.length() - 1));
         List<Contact> contacts = new ArrayList<>();
         for (String obj : objects) {
-            String normalized = obj;
+            String normalized = obj.trim();
+            if (normalized.isEmpty()) continue;
             if (!normalized.startsWith("{")) normalized = "{" + normalized;
             if (!normalized.endsWith("}")) normalized = normalized + "}";
             Contact c = parseContact(normalized);
             contacts.add(c);
         }
         return contacts;
+    }
+
+    /**
+     * Splits a JSON array content into individual object strings.
+     * Properly handles nested braces to avoid splitting inside nested objects or arrays.
+     */
+    private static List<String> splitJsonObjects(String json) {
+        List<String> objects = new ArrayList<>();
+        int braceCount = 0;
+        StringBuilder current = new StringBuilder();
+        boolean inString = false;
+        boolean escapeNext = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (escapeNext) {
+                current.append(c);
+                escapeNext = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                current.append(c);
+                escapeNext = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                current.append(c);
+                continue;
+            }
+
+            if (inString) {
+                current.append(c);
+                continue;
+            }
+
+            if (c == '{') {
+                braceCount++;
+                current.append(c);
+            } else if (c == '}') {
+                braceCount--;
+                current.append(c);
+                if (braceCount == 0 && current.length() > 0) {
+                    objects.add(current.toString().trim());
+                    current = new StringBuilder();
+                }
+            } else if (c == ',' && braceCount == 0) {
+                // Skip commas between objects
+                continue;
+            } else {
+                current.append(c);
+            }
+        }
+
+        // Add any remaining content if it's a valid object
+        if (current.toString().trim().startsWith("{")) {
+            objects.add(current.toString().trim());
+        }
+
+        return objects;
     }
 
     private static Contact parseContact(String json) {
@@ -121,15 +185,22 @@ public final class JsonUtil {
                 .map(Email::new).toList();
 
         Address address = null;
-        if (map.containsKey("address")) {
-            Map<String, String> addrMap = parseSimpleJsonObject(map.get("address"));
-            address = new Address(
-                    addrMap.get("street"),
-                    addrMap.get("city"),
-                    addrMap.get("region"),
-                    addrMap.get("postalCode"),
-                    addrMap.get("country")
-            );
+        String addrJson = map.get("address");
+        if (addrJson != null && !addrJson.equals("null") && !addrJson.isBlank()) {
+            Map<String, String> addrMap = parseSimpleJsonObject(addrJson);
+            String street = addrMap.get("street");
+            String city = addrMap.get("city");
+            String region = addrMap.get("region");
+            String postalCode = addrMap.get("postalCode");
+            String country = addrMap.get("country");
+            // Only create address if at least one field is non-empty
+            if ((street != null && !street.isEmpty()) ||
+                (city != null && !city.isEmpty()) ||
+                (region != null && !region.isEmpty()) ||
+                (postalCode != null && !postalCode.isEmpty()) ||
+                (country != null && !country.isEmpty())) {
+                address = new Address(street, city, region, postalCode, country);
+            }
         }
 
         LocalDateTime createdAt = LocalDateTime.parse(map.get("createdAt"));
@@ -147,17 +218,85 @@ public final class JsonUtil {
         if (body.startsWith("{")) body = body.substring(1);
         if (body.endsWith("}")) body = body.substring(0, body.length() - 1);
 
-        String[] pairs = body.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+        List<String> pairs = splitTopLevel(body, ',');
         for (String pair : pairs) {
-            String[] kv = pair.split(":", 2);
-            if (kv.length == 2) {
-                String key = kv[0].trim().replaceAll("^\"|\"$", "");
-                String val = kv[1].trim();
-                val = val.replaceAll("^\"|\"$", "");
+            List<String> kv = splitTopLevel(pair, ':');
+            if (kv.size() == 2) {
+                String key = kv.get(0).trim().replaceAll("^\"|\"$", "");
+                String val = kv.get(1).trim();
+                // Don't remove quotes from arrays and objects, only from primitive strings
+                if (!val.startsWith("[") && !val.startsWith("{")) {
+                    val = val.replaceAll("^\"|\"$", "");
+                }
                 map.put(key, val);
             }
         }
         return map;
+    }
+
+    /**
+     * Splits a string by delimiter only at the top level.
+     * Does not split inside strings, arrays, or objects.
+     */
+    private static List<String> splitTopLevel(String str, char delimiter) {
+        List<String> result = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int braceDepth = 0;
+        int bracketDepth = 0;
+        boolean inString = false;
+        boolean escapeNext = false;
+
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+
+            if (escapeNext) {
+                current.append(c);
+                escapeNext = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                current.append(c);
+                escapeNext = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                current.append(c);
+                continue;
+            }
+
+            if (inString) {
+                current.append(c);
+                continue;
+            }
+
+            if (c == '{') {
+                braceDepth++;
+                current.append(c);
+            } else if (c == '}') {
+                braceDepth--;
+                current.append(c);
+            } else if (c == '[') {
+                bracketDepth++;
+                current.append(c);
+            } else if (c == ']') {
+                bracketDepth--;
+                current.append(c);
+            } else if (c == delimiter && braceDepth == 0 && bracketDepth == 0) {
+                result.add(current.toString().trim());
+                current = new StringBuilder();
+            } else {
+                current.append(c);
+            }
+        }
+
+        if (current.length() > 0) {
+            result.add(current.toString().trim());
+        }
+
+        return result;
     }
 
     private static List<String> parseArray(String raw) {

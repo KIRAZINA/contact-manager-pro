@@ -32,7 +32,10 @@ public final class CommandManager {
     }
 
     public void undo() {
-        if (!canUndo()) return;
+        if (!canUndo()) {
+            System.out.println("⚠️ Nothing to undo");
+            return;
+        }
         Command cmd = undoStack.pop();
         cmd.undo();
         redoStack.push(cmd);
@@ -40,10 +43,22 @@ public final class CommandManager {
     }
 
     public void redo() {
-        if (!canRedo()) return;
+        if (!canRedo()) {
+            System.out.println("⚠️ Nothing to redo");
+            return;
+        }
         Command cmd = redoStack.pop();
         cmd.execute();
         undoStack.push(cmd);
         if (logger != null) logger.log(cmd, "REDO");
     }
+
+    public int getUndoStackSize() {
+        return undoStack.size();
+    }
+
+    public int getRedoStackSize() {
+        return redoStack.size();
+    }
 }
+

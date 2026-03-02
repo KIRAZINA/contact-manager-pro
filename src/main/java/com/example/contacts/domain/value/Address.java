@@ -60,9 +60,9 @@ public record Address(String street, String city, String region,
     @Override
     public String toString() {
         return Stream.of(street, city, region, postalCode, country)
-                .filter(Objects::nonNull)       // пропускаємо null
-                .map(String::trim)              // прибираємо пробіли
-                .filter(s -> !s.isEmpty())      // пропускаємо пусті рядки
+                .filter(Objects::nonNull)       // skip null values
+                .map(String::trim)              // trim whitespace
+                .filter(s -> !s.isEmpty())      // skip empty strings
                 .collect(Collectors.joining(", "));
     }
 

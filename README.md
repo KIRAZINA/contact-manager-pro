@@ -1,6 +1,5 @@
-
 # Contact Manager Pro — Core Java 17, Clean MVC, Command, Undo/Redo
-```markdown
+
 ## 🔹 Project Overview
 **Contact Manager Pro** is a console-based business application built with pure **Java 17**.  
 It demonstrates:
@@ -26,10 +25,10 @@ Frameworks are **forbidden**. Only the standard Java library is allowed.
 - Import / Export (CSV / JSON)
 - Audit logging (Observer)
 
-```
 ---
+
 ## 🧱 Architecture
-```markdown
+```
 View (ConsoleView)
 ↓ 
 Controller (ContactController)
@@ -73,6 +72,7 @@ Persistence (FileContactRepository)
 ---
 
 ## 📂 Project Structure
+
 ```
 com.example.contacts
 ├── app
@@ -114,8 +114,8 @@ com.example.contacts
 │   ├── CsvUtil.java
 │   └── JsonUtil.java
 └── exception
-├── ValidationException.java
-└── ContactNotFoundException.java
+    ├── ValidationException.java
+    └── ContactNotFoundException.java
 ```
 
 ---
@@ -161,12 +161,16 @@ Contact created: 123e4567-e89b-12d3-a456-426614174000
 ---
 
 ## 🧪 Testing
-- JUnit 5 (`junit-jupiter-api`, `junit-jupiter-engine`)
-- Tests cover:
+- **JUnit 5** (`junit-jupiter-api`, `junit-jupiter-engine`)
+- **105+ tests** covering:
     - Value Objects (`Email`, `PhoneNumber`, `Address`)
     - Entity (`Contact`)
-    - CommandManager (undo/redo)
-    - FileContactRepository (save/load)
+    - Domain Factory (`ContactFactory`)
+    - Command pattern (`CommandManager`, `CommandIntegrationTest`)
+    - Repository (`FileContactRepository`, `FileContactRepositoryExtendedTest`)
+    - Services (`ContactService`)
+    - Utilities (`CsvUtil`, `JsonUtil`)
+    - Observer (`AuditLogger`)
 
 Run tests:
 ```bash

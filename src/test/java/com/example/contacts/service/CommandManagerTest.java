@@ -21,7 +21,7 @@ class CommandManagerTest {
 
     @BeforeEach
     void setup() {
-        // Тестовий файл у target/test-contacts.csv
+        // Test file in target/test-contacts.csv
         Path testFile = Path.of("target", "test-contacts.csv");
         repo = new FileContactRepository(testFile);
         manager = new CommandManager();
@@ -36,10 +36,10 @@ class CommandManagerTest {
         CreateContactCommand cmd = new CreateContactCommand(repo, c);
 
         manager.executeCommand(cmd);
-        assertTrue(repo.findById(c.getId()).isPresent(), "Контакт має бути створений");
+        assertTrue(repo.findById(c.getId()).isPresent(), "Contact should be created");
 
         manager.undo();
-        assertFalse(repo.findById(c.getId()).isPresent(), "Контакт має бути видалений після undo");
+        assertFalse(repo.findById(c.getId()).isPresent(), "Contact should be deleted after undo");
     }
 
     @Test
@@ -55,7 +55,7 @@ class CommandManagerTest {
         assertFalse(repo.findById(c.getId()).isPresent());
 
         manager.redo();
-        assertTrue(repo.findById(c.getId()).isPresent(), "Контакт має бути відновлений після redo");
+        assertTrue(repo.findById(c.getId()).isPresent(), "Contact should be restored after redo");
     }
 
     @Test
@@ -75,8 +75,8 @@ class CommandManagerTest {
         manager.undo();
         assertTrue(manager.canRedo());
 
-        // Виконання нової команди має очистити redo-стек
+        // Executing a new command should clear the redo stack
         manager.executeCommand(cmd2);
-        assertFalse(manager.canRedo(), "Redo стек має бути очищений після нової команди");
+        assertFalse(manager.canRedo(), "Redo stack should be cleared after new command");
     }
 }

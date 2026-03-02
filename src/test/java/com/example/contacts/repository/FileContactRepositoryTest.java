@@ -57,7 +57,7 @@ class FileContactRepositoryTest {
         repo.save(c2);
         repo.flush();
 
-        // Створюємо новий екземпляр репозиторію, щоб перевірити reload
+        // Create a new repository instance to test reload
         FileContactRepository repo2 = new FileContactRepository(testFile);
         List<Contact> contacts = repo2.findAll();
 
@@ -91,11 +91,11 @@ class FileContactRepositoryTest {
         repo.save(c);
         repo.flush();
 
-        // За замовчуванням ACTIVE
+        // Default status is ACTIVE
         List<Contact> active = repo.filterByStatus(ContactStatus.ACTIVE);
         assertEquals(1, active.size());
 
-        // Архівуємо
+        // Archive the contact
         c.archive();
         repo.save(c);
         repo.flush();

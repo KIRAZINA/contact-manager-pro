@@ -81,7 +81,9 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized List<Contact> findWhere(Predicate<Contact> predicate) {
         ensureLoaded();
-        return Collections.unmodifiableList(new ArrayList<>(byId.values()));
+        return byId.values().stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -115,8 +117,9 @@ public final class FileContactRepository implements ContactRepository {
     public synchronized Contact save(Contact contact) {
         ensureLoaded();
         if (byId.containsKey(contact.getId())) {
-            System.out.println("⚠️ Contact with ID " + contact.getId() + " already exists. Skipping save.");
-            return byId.get(contact.getId());
+            // Update existing contact
+            byId.put(contact.getId(), contact);
+            return contact;
         }
         byId.put(contact.getId(), contact);
         return contact;

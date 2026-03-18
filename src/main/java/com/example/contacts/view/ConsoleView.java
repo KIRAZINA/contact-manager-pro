@@ -3,11 +3,15 @@ package com.example.contacts.view;
 import com.example.contacts.controller.ContactController;
 import com.example.contacts.domain.entity.Contact;
 import com.example.contacts.domain.factory.ContactFactory;
+import com.example.contacts.domain.value.Address;
 import com.example.contacts.domain.value.Email;
 import com.example.contacts.domain.value.PhoneNumber;
-import com.example.contacts.domain.value.Address;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Scanner;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +31,10 @@ public final class ConsoleView {
         boolean running = true;
         while (running) {
             showMenu();
+            if (!scanner.hasNextLine()) {
+                System.out.println();
+                break;
+            }
             String cmd = scanner.nextLine().trim().toLowerCase();
             switch (cmd) {
                 case "1" -> addContact();
@@ -94,34 +102,36 @@ public final class ConsoleView {
             );
         }
 
-        Contact c = ContactFactory.create(firstName, lastName, phones, emails, address);
-        controller.createContact(c);
-        System.out.println("Contact created: " + c.getId());
+        Contact contact = ContactFactory.create(firstName, lastName, phones, emails, address);
+        controller.createContact(contact);
+        System.out.println("Contact created: " + contact.getId());
     }
 
     private void listContacts() {
         List<Contact> contacts = controller.listContacts();
         if (contacts.isEmpty()) {
-            System.out.println("\uD83D\uDCED No contacts to display");
+            System.out.println("No contacts to display");
             return;
         }
-        contacts.forEach(c -> {
-            System.out.println(c.getId() + " | " + c.getFirstName() + " " + c.getLastName()
-                    + " | " + c.getStatus()
-                    + " | phones=" + c.getPhones()
-                    + " | emails=" + c.getEmails());
-        });
+        contacts.forEach(contact -> System.out.println(
+                contact.getId() + " | " + contact.getFirstName() + " " + contact.getLastName()
+                        + " | " + contact.getStatus()
+                        + " | phones=" + contact.getPhones()
+                        + " | emails=" + contact.getEmails()
+        ));
     }
 
     private void searchContacts() {
         System.out.print("Search query: ");
-        String q = scanner.nextLine();
-        List<Contact> results = controller.search(q);
+        String query = scanner.nextLine();
+        List<Contact> results = controller.search(query);
         if (results.isEmpty()) {
             System.out.println("Nothing found");
             return;
         }
-        results.forEach(c -> System.out.println(c.getId() + " | " + c.getFirstName() + " " + c.getLastName()));
+        results.forEach(contact -> System.out.println(
+                contact.getId() + " | " + contact.getFirstName() + " " + contact.getLastName()
+        ));
     }
 
     private void deleteContact() {
@@ -129,15 +139,15 @@ public final class ConsoleView {
         String idRaw = scanner.nextLine();
         try {
             UUID id = UUID.fromString(idRaw);
-            Optional<Contact> c = controller.getContact(id);
-            if (c.isPresent()) {
-                controller.deleteContact(c.get());
-                System.out.println("✅ Contact deleted (ID: \" + id + \")");
+            Optional<Contact> contact = controller.getContact(id);
+            if (contact.isPresent()) {
+                controller.deleteContact(contact.get());
+                System.out.println("Contact deleted (ID: " + id + ")");
             } else {
-                System.out.println("⚠\uFE0F No contact found with this ID");
+                System.out.println("No contact found with this ID");
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("❌ Invalid UUID format");
+            System.out.println("Invalid UUID format");
         }
     }
 
@@ -146,9 +156,9 @@ public final class ConsoleView {
         String idRaw = scanner.nextLine();
         try {
             UUID id = UUID.fromString(idRaw);
-            Optional<Contact> c = controller.getContact(id);
-            if (c.isPresent()) {
-                controller.archiveContact(c.get());
+            Optional<Contact> contact = controller.getContact(id);
+            if (contact.isPresent()) {
+                controller.archiveContact(contact.get());
                 System.out.println("Contact archived");
             } else {
                 System.out.println("Contact not found");
@@ -163,9 +173,9 @@ public final class ConsoleView {
         String idRaw = scanner.nextLine();
         try {
             UUID id = UUID.fromString(idRaw);
-            Optional<Contact> c = controller.getContact(id);
-            if (c.isPresent()) {
-                controller.restoreContact(c.get());
+            Optional<Contact> contact = controller.getContact(id);
+            if (contact.isPresent()) {
+                controller.restoreContact(contact.get());
                 System.out.println("Contact restored");
             } else {
                 System.out.println("Contact not found");
@@ -196,5 +206,4 @@ public final class ConsoleView {
         System.out.println("Undo stack size: " + controller.getUndoStackSize());
         System.out.println("Redo stack size: " + controller.getRedoStackSize());
     }
-
 }

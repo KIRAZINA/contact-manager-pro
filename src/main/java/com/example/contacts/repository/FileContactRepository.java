@@ -12,10 +12,21 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -26,7 +37,7 @@ import java.util.stream.Collectors;
  *
  * - phones: phone1|phone2|...
  * - emails: email1|email2|...
- * - address: street|city|region|postalCode|country (empty fields are allowed if the address is missing — empty line)
+ * - address: street|city|region|postalCode|country (empty fields are allowed if the address is missing)
  * - date in ISO format: LocalDateTime.toString()
  *
  * Flush atomicity: write to temporary file + Files.move(..., ATOMIC_MOVE/REPLACE_EXISTING).
@@ -50,10 +61,13 @@ public final class FileContactRepository implements ContactRepository {
                 Files.createDirectories(parent);
             }
             if (!Files.exists(file)) {
-                try (BufferedWriter w = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE)) {
-                    w.write(header());
-                    w.newLine();
+                try (BufferedWriter writer = Files.newBufferedWriter(
+                        file,
+                        StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE
+                )) {
+                    writer.write(header());
+                    writer.newLine();
                 }
             }
         } catch (IOException e) {
@@ -68,8 +82,7 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized Optional<Contact> findById(UUID id) {
         ensureLoaded();
-        Contact c = byId.get(id);
-        return Optional.ofNullable(c);
+        return Optional.ofNullable(byId.get(id));
     }
 
     @Override
@@ -89,42 +102,43 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized List<Contact> fullTextSearch(String query) {
         ensureLoaded();
-        String q = query == null ? "" : query.trim().toLowerCase();
-        if (q.isEmpty()) return List.of();
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase();
+        if (normalizedQuery.isEmpty()) {
+            return List.of();
+        }
         return byId.values().stream()
-                .filter(c -> c.searchTokens().stream().anyMatch(t -> t.toLowerCase().contains(q)))
+                .filter(contact -> contact.searchTokens().stream()
+                        .anyMatch(token -> token.toLowerCase().contains(normalizedQuery)))
                 .collect(Collectors.toList());
     }
 
     @Override
     public synchronized List<Contact> filterByStatus(ContactStatus status) {
         ensureLoaded();
-        return byId.values().stream().filter(c -> c.getStatus() == status).collect(Collectors.toList());
+        return byId.values().stream()
+                .filter(contact -> contact.getStatus() == status)
+                .collect(Collectors.toList());
     }
 
     @Override
     public synchronized List<Contact> filterByCreatedDateRange(LocalDate fromInclusive, LocalDate toInclusive) {
         ensureLoaded();
-        return byId.values().stream().filter(c -> {
-            LocalDate d = c.getCreatedAt().toLocalDate();
-            boolean ge = (fromInclusive == null) || !d.isBefore(fromInclusive);
-            boolean le = (toInclusive == null) || !d.isAfter(toInclusive);
-            return ge && le;
-        }).collect(Collectors.toList());
+        return byId.values().stream()
+                .filter(contact -> {
+                    LocalDate createdDate = contact.getCreatedAt().toLocalDate();
+                    boolean isAfterOrEqual = fromInclusive == null || !createdDate.isBefore(fromInclusive);
+                    boolean isBeforeOrEqual = toInclusive == null || !createdDate.isAfter(toInclusive);
+                    return isAfterOrEqual && isBeforeOrEqual;
+                })
+                .collect(Collectors.toList());
     }
 
     @Override
     public synchronized Contact save(Contact contact) {
         ensureLoaded();
-        if (byId.containsKey(contact.getId())) {
-            // Update existing contact
-            byId.put(contact.getId(), contact);
-            return contact;
-        }
         byId.put(contact.getId(), contact);
         return contact;
     }
-
 
     @Override
     public synchronized boolean deleteById(UUID id) {
@@ -147,48 +161,54 @@ public final class FileContactRepository implements ContactRepository {
     @Override
     public synchronized void reload() {
         Map<UUID, Contact> newMap = new LinkedHashMap<>();
-        try (BufferedReader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+        try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
             boolean first = true;
-            while ((line = r.readLine()) != null) {
-                if (first) { // skip the title
+            while ((line = reader.readLine()) != null) {
+                if (first) {
                     first = false;
-                    if (line.trim().equalsIgnoreCase(header())) continue;
+                    if (line.trim().equalsIgnoreCase(header())) {
+                        continue;
+                    }
                 }
-                if (line.trim().isEmpty()) continue;
-                Contact c = parseContact(line);
-                newMap.put(c.getId(), c);
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                Contact contact = parseContact(line);
+                newMap.put(contact.getId(), contact);
             }
         } catch (IOException e) {
-            System.err.println("❌ Error reading repository file: " + file + " | " + e.getMessage());
+            System.err.println("Error reading repository file: " + file + " | " + e.getMessage());
             throw new RuntimeException("Repository read error: " + file, e);
         }
-        synchronized (this) {
-            byId.clear();
-            byId.putAll(newMap);
-            loaded = true;
-        }
+        byId.clear();
+        byId.putAll(newMap);
+        loaded = true;
     }
 
     @Override
     public synchronized void flush() {
         ensureLoaded();
         Path tmp = file.resolveSibling(file.getFileName().toString() + ".tmp");
-        try (BufferedWriter w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-            w.write(header());
-            w.newLine();
-            for (Contact c : byId.values()) {
-                w.write(serializeContact(c));
-                w.newLine();
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                tmp,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING
+        )) {
+            writer.write(header());
+            writer.newLine();
+            for (Contact contact : byId.values()) {
+                writer.write(serializeContact(contact));
+                writer.newLine();
             }
         } catch (IOException e) {
             throw new RuntimeException("Temporary file write error: " + tmp, e);
         }
+
         try {
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException e) {
-            // If the file system does not support ATOMIC_MOVE, fall back to REPLACE_EXISTING
             try {
                 Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException ex) {
@@ -199,47 +219,54 @@ public final class FileContactRepository implements ContactRepository {
         }
     }
 
-    // ---------- Serialization/deserialization ----------
-
-    private String serializeContact(Contact c) {
+    private String serializeContact(Contact contact) {
         List<String> cells = new ArrayList<>(9);
-        cells.add(c.getId().toString());
-        cells.add(c.getFirstName());
-        cells.add(c.getLastName());
-        cells.add(serializePhones(c.getPhones()));
-        cells.add(serializeEmails(c.getEmails()));
-        cells.add(serializeAddress(c.getAddress().orElse(null)));
-        cells.add(c.getCreatedAt().toString());
-        cells.add(c.getUpdatedAt().toString());
-        cells.add(c.getStatus().name());
+        cells.add(contact.getId().toString());
+        cells.add(contact.getFirstName());
+        cells.add(contact.getLastName());
+        cells.add(serializePhones(contact.getPhones()));
+        cells.add(serializeEmails(contact.getEmails()));
+        cells.add(serializeAddress(contact.getAddress().orElse(null)));
+        cells.add(contact.getCreatedAt().toString());
+        cells.add(contact.getUpdatedAt().toString());
+        cells.add(contact.getStatus().name());
         return CsvUtil.joinEscaped(cells);
     }
 
     private static String serializePhones(List<PhoneNumber> phones) {
-        if (phones == null || phones.isEmpty()) return "";
-        return phones.stream().map(PhoneNumber::normalized).collect(Collectors.joining("|"));
+        if (phones == null || phones.isEmpty()) {
+            return "";
+        }
+        return phones.stream()
+                .map(PhoneNumber::normalized)
+                .collect(Collectors.joining("|"));
     }
 
     private static String serializeEmails(List<Email> emails) {
-        if (emails == null || emails.isEmpty()) return "";
-        return emails.stream().map(Email::normalized).collect(Collectors.joining("|"));
+        if (emails == null || emails.isEmpty()) {
+            return "";
+        }
+        return emails.stream()
+                .map(Email::normalized)
+                .collect(Collectors.joining("|"));
     }
 
-    private static String serializeAddress(Address a) {
-        if (a == null) return "";
+    private static String serializeAddress(Address address) {
+        if (address == null) {
+            return "";
+        }
         List<String> parts = List.of(
-                nullSafe(a.street()),
-                nullSafe(a.city()),
-                nullSafe(a.region()),
-                nullSafe(a.postalCode()),
-                nullSafe(a.country())
+                nullSafe(address.street()),
+                nullSafe(address.city()),
+                nullSafe(address.region()),
+                nullSafe(address.postalCode()),
+                nullSafe(address.country())
         );
-        // '|' separates the address fields; separate escaping is not necessary because we put the entire address in one CSV cell
         return String.join("|", parts);
     }
 
-    private static String nullSafe(String s) {
-        return s == null ? "" : s;
+    private static String nullSafe(String value) {
+        return value == null ? "" : value;
     }
 
     private Contact parseContact(String line) {
@@ -247,6 +274,7 @@ public final class FileContactRepository implements ContactRepository {
         if (cells.size() < 9) {
             throw new RuntimeException("Incorrect CSV string: 9 fields expected, received " + cells.size());
         }
+
         UUID id = UUID.fromString(cells.get(0));
         String firstName = cells.get(1);
         String lastName = cells.get(2);
@@ -257,52 +285,61 @@ public final class FileContactRepository implements ContactRepository {
         LocalDateTime updatedAt = LocalDateTime.parse(cells.get(7));
         ContactStatus status = ContactStatus.valueOf(cells.get(8));
 
-        // Create Contact, bypassing the factory to save time/status
         return new Contact(id, firstName, lastName, phones, emails, address, createdAt, updatedAt, status);
     }
 
     private List<PhoneNumber> parsePhones(String cell) {
-        if (cell == null || cell.isEmpty()) return new ArrayList<>();
+        if (cell == null || cell.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         String[] parts = cell.split("\\|");
         List<PhoneNumber> out = new ArrayList<>(parts.length);
-        for (String p : parts) {
-            if (!p.isEmpty()) {
-                out.add(new PhoneNumber(p));
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                out.add(new PhoneNumber(part));
             }
         }
-        // remove possible duplicates according to normalization
         return out.stream().distinct().collect(Collectors.toCollection(ArrayList::new));
     }
 
     private List<Email> parseEmails(String cell) {
-        if (cell == null || cell.isEmpty()) return new ArrayList<>();
+        if (cell == null || cell.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         String[] parts = cell.split("\\|");
         List<Email> out = new ArrayList<>(parts.length);
-        for (String p : parts) {
-            if (!p.isEmpty()) {
-                out.add(new Email(p));
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                out.add(new Email(part));
             }
         }
         return out.stream().distinct().collect(Collectors.toCollection(ArrayList::new));
     }
 
     private Address parseAddress(String cell) {
-        if (cell == null || cell.isEmpty()) return null;
-        String[] parts = cell.split("\\|", -1); // let's keep them empty
+        if (cell == null || cell.isEmpty()) {
+            return null;
+        }
+
+        String[] parts = cell.split("\\|", -1);
         String street = parts.length > 0 && !parts[0].isEmpty() ? parts[0] : null;
         String city = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
         String region = parts.length > 2 && !parts[2].isEmpty() ? parts[2] : null;
         String postal = parts.length > 3 && !parts[3].isEmpty() ? parts[3] : null;
         String country = parts.length > 4 && !parts[4].isEmpty() ? parts[4] : null;
+
         try {
             return new Address(street, city, region, postal, country);
         } catch (ValidationException e) {
-            // If the address is completely empty, we have already returned null; other errors are critical.
             throw e;
         }
     }
 
     private void ensureLoaded() {
-        if (!loaded) reload();
+        if (!loaded) {
+            reload();
+        }
     }
 }

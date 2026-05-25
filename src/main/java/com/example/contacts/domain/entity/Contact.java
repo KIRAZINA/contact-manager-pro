@@ -8,12 +8,18 @@ import com.example.contacts.exception.ValidationException;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * Contact unit: responsible for invariants, normalization, uniqueness, and timestamps.
- * First and last names are stored in normalized form (truncated, without extra spaces).
- * Email/phone lists without duplicates after normalization.
+ * Contact aggregate root: responsible for invariants, normalization, and timestamps.
+ *
+ * Improvements (see Architectural Review):
+ *  - Issue 3.3: getPhones() / getEmails() now return List.copyOf() instead of
+ *               Collections.unmodifiableList(). The latter only blocks writes through the
+ *               wrapper but still reflects mutations in the backing list; List.copyOf()
+ *               produces a truly independent snapshot.
+ *  - Issue 6.1 / 6.2: searchTokens() and tokenizeName() have been removed.
+ *               Search logic now lives entirely in SQL (SqliteContactRepository.SEARCH),
+ *               keeping the domain entity free of infrastructure concerns.
  */
 public final class Contact {
 
@@ -22,7 +28,7 @@ public final class Contact {
     private String lastName;
     private final List<PhoneNumber> phones;
     private final List<Email> emails;
-    private Address address; // optional (can be null if not specified)
+    private Address address; // optional — use getAddress() which returns Optional<Address>
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private ContactStatus status;
@@ -40,7 +46,7 @@ public final class Contact {
         this.id = Objects.requireNonNull(id, "id cannot be null");
         setNames(firstName, lastName); // normalizes and validates
 
-        // Initializing time fields before calling addPhone/addEmail
+        // Initialize time fields before calling addPhone/addEmail
         this.createdAt = (createdAt != null) ? createdAt : LocalDateTime.now();
         this.updatedAt = (updatedAt != null) ? updatedAt : this.createdAt;
         if (this.updatedAt.isBefore(this.createdAt)) {
@@ -51,23 +57,38 @@ public final class Contact {
 
         // Collections
         this.phones = new ArrayList<>();
-        this.emails = new ArrayList<>();
-        if (phones != null) phones.forEach(this::addPhone);
-        if (emails != null) emails.forEach(this::addEmail);
-
-        // Business rule: contact must contain at least a phone number or email address
-        if (this.phones.isEmpty() && this.emails.isEmpty()) {
-            throw new ValidationException("contact", "The contact must include at least a phone number or email address.");
+        if (phones != null) {
+            for (PhoneNumber phone : phones) {
+                Objects.requireNonNull(phone, "phone cannot be null");
+                if (!this.phones.contains(phone)) {
+                    this.phones.add(phone);
+                }
+            }
         }
 
-        // Address may be null (absent)
+        this.emails = new ArrayList<>();
+        if (emails != null) {
+            for (Email email : emails) {
+                Objects.requireNonNull(email, "email cannot be null");
+                if (!this.emails.contains(email)) {
+                    this.emails.add(email);
+                }
+            }
+        }
+
+        // Business rule: at least one phone or email required
+        if (this.phones.isEmpty() && this.emails.isEmpty()) {
+            throw new ValidationException("contact",
+                    "The contact must include at least a phone number or email address.");
+        }
+
+        // Address is optional
         if (address != null) {
             this.address = address;
         }
     }
 
-
-    // --------- Static factory methods for convenience ---------
+    // --------- Static factory methods ---------
 
     public static Contact createNew(String firstName,
                                     String lastName,
@@ -79,7 +100,7 @@ public final class Contact {
                 address, now, now, ContactStatus.ACTIVE);
     }
 
-    // --------- Getters with mutation protection ---------
+    // --------- Getters with true immutability (Issue 3.3) ---------
 
     public UUID getId() {
         return id;
@@ -93,12 +114,20 @@ public final class Contact {
         return lastName;
     }
 
+    /**
+     * Returns a true immutable snapshot of the phone list (List.copyOf).
+     * Unlike Collections.unmodifiableList, changes to the internal list
+     * are NOT reflected in the returned list.
+     */
     public List<PhoneNumber> getPhones() {
-        return Collections.unmodifiableList(phones);
+        return List.copyOf(phones);
     }
 
+    /**
+     * Returns a true immutable snapshot of the email list (List.copyOf).
+     */
     public List<Email> getEmails() {
-        return Collections.unmodifiableList(emails);
+        return List.copyOf(emails);
     }
 
     public Optional<Address> getAddress() {
@@ -127,7 +156,7 @@ public final class Contact {
 
     public void setAddress(Address newAddress) {
         ensureActiveForMutation();
-        this.address = newAddress; // Address — immutable record
+        this.address = newAddress; // Address is an immutable record
         touch();
     }
 
@@ -209,7 +238,7 @@ public final class Contact {
         }
 
         this.firstName = f;
-        this.lastName = l;
+        this.lastName  = l;
     }
 
     private static String normalizeName(String s) {
@@ -219,42 +248,27 @@ public final class Contact {
 
     private void ensureActiveForMutation() {
         if (status == ContactStatus.ARCHIVED) {
-            throw new ValidationException("status", "Mutations are prohibited for archived contacts");
+            throw new ValidationException("status",
+                    "Mutations are prohibited for archived contacts");
         }
     }
 
     private void ensureAtLeastOneContactPoint() {
         if (phones.isEmpty() && emails.isEmpty()) {
-            throw new ValidationException("contact", "The contact must contain at least an email address or telephone number");
+            throw new ValidationException("contact",
+                    "The contact must contain at least an email address or telephone number");
         }
     }
 
     private void touch() {
         this.updatedAt = LocalDateTime.now();
         if (updatedAt.isBefore(createdAt)) {
-            // insurance against systemic time anomalies
+            // Insurance against system clock anomalies
             this.updatedAt = createdAt;
         }
     }
 
-    // --------- Derived keys for searching ---------
-
-    public Set<String> searchTokens() {
-        Set<String> tokens = new LinkedHashSet<>();
-        tokens.addAll(tokenizeName(firstName));
-        tokens.addAll(tokenizeName(lastName));
-        tokens.addAll(emails.stream().map(Email::normalized).collect(Collectors.toSet()));
-        tokens.addAll(phones.stream().map(PhoneNumber::normalized).collect(Collectors.toSet()));
-        return Collections.unmodifiableSet(tokens);
-    }
-
-    private static List<String> tokenizeName(String n) {
-        return Arrays.stream(n.split("\\s+"))
-                .map(String::toLowerCase)
-                .collect(Collectors.toList());
-    }
-
-    // --------- Convenient comparators (for sorting strategies) ---------
+    // --------- Convenient comparators ---------
 
     public static Comparator<Contact> comparingByName() {
         return Comparator.comparing(Contact::getLastName, String.CASE_INSENSITIVE_ORDER)

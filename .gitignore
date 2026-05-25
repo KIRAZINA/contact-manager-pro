@@ -49,3 +49,13 @@ Desktop.ini
 /.idea/
 /.vscode/
 /*.iml
+
+# === Databases and Local Data ===
+*.db
+*.db-shm
+*.db-wal
+contacts.csv
+
+# === Architecture Documentation ===
+ARCHITECTURE.md
+Architectural Review & Critical Analysis.md

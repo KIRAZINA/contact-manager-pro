@@ -107,8 +107,21 @@ public final class FileContactRepository implements ContactRepository {
             return List.of();
         }
         return byId.values().stream()
-                .filter(contact -> contact.searchTokens().stream()
-                        .anyMatch(token -> token.toLowerCase().contains(normalizedQuery)))
+                .filter(contact -> {
+                    if (contact.getFirstName().toLowerCase().contains(normalizedQuery)) return true;
+                    if (contact.getLastName().toLowerCase().contains(normalizedQuery)) return true;
+                    if (contact.getPhones().stream().anyMatch(phone -> phone.normalized().toLowerCase().contains(normalizedQuery))) return true;
+                    if (contact.getEmails().stream().anyMatch(email -> email.normalized().toLowerCase().contains(normalizedQuery))) return true;
+                    if (contact.getAddress().isPresent()) {
+                        Address addr = contact.getAddress().get();
+                        if (addr.street() != null && addr.street().toLowerCase().contains(normalizedQuery)) return true;
+                        if (addr.city() != null && addr.city().toLowerCase().contains(normalizedQuery)) return true;
+                        if (addr.region() != null && addr.region().toLowerCase().contains(normalizedQuery)) return true;
+                        if (addr.postalCode() != null && addr.postalCode().toLowerCase().contains(normalizedQuery)) return true;
+                        if (addr.country() != null && addr.country().toLowerCase().contains(normalizedQuery)) return true;
+                    }
+                    return false;
+                })
                 .collect(Collectors.toList());
     }
 

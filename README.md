@@ -1,72 +1,67 @@
 # Contact Manager Pro
 
-Console contact manager on pure Java 17 with MVC-style layering, command-based mutations, undo/redo, CSV persistence, and audit logging.
+A fast, lightweight console-based contact manager built with Java 17. It uses an MVC-style architecture, the Command pattern for undo/redo support, an embedded SQLite database for secure transactional storage, and JSON Lines for structured logging.
 
 ## Features
-- Create, view, search, delete, archive, and restore contacts
-- Undo and redo for state-changing operations
-- Full-text search by name, phone, and email
-- CSV persistence in `contacts.csv`
-- Audit log output in `audit.log`
-- Unit tests with JUnit 5
+- **Full CRUD operations**: Create, view, search, delete, archive, and restore contacts.
+- **Session-Scoped Undo/Redo**: Revert or reapply mutations during the current session (capped at 1000 items to keep memory clean).
+- **SQLite Persistence**: Replaces simple files with fully ACID-compliant embedded relational storage (`contacts.db`) in WAL mode.
+- **JSON Lines Logging**: Generates structured audit trails (`audit.log`) with automatic rotation when the file reaches 10 MB.
+- **CSV Import**: Automatically detects existing legacy `contacts.csv` files on first boot, migrates data to SQLite, and moves the old CSV to `contacts.csv.bak`.
 
 ## Architecture
-```text
-View (ConsoleView)
-  -> Controller (ContactController)
-  -> Service layer (ContactService, CommandManager)
-  -> Domain model (Contact, value objects, factory)
-  -> Persistence (FileContactRepository)
-```
+The project follows a standard MVC structure combined with the Command pattern for mutations:
+
+- **View (`ConsoleView`)**: Handles user interactions on the command line.
+- **Controller (`ContactController`)**: Dispatches commands and returns friendly responses or validation errors.
+- **Service (`ContactService`, `CommandManager`)**: Orchestrates operations and manages the undo/redo stack.
+- **Domain (`Contact`, value records)**: Enforces business logic and validates inputs.
+- **Repository (`SqliteContactRepository`)**: Handles all SQL database operations and safely maps records to domain entities.
 
 ## Requirements
 - Java 17+
-- Maven installed and available as `mvn`
-- Docker Desktop or Docker Engine for container builds
+- Maven
+- Docker (optional, for running in containers)
 
-## Build And Run
-1. Build the project:
-   ```bash
-   mvn clean package
-   ```
-2. Run the executable jar:
-   ```bash
-   java -jar target/contact-manager-pro.jar
-   ```
+## Getting Started
 
-## Run Tests
+### Build the Project
+Use Maven to clean and package the application:
+```bash
+mvn clean package
+```
+
+### Run the Application
+Run the packaged JAR:
+```bash
+java -jar target/contact-manager-pro.jar
+```
+
+### Run Tests
+To run all 116 tests (including unit, database, and integration tests):
 ```bash
 mvn test
 ```
 
-## Docker
-Build the image:
+## Running with Docker
+
+### 1. Build the image
 ```bash
 docker build -t contact-manager-pro:local .
 ```
 
-Run the container interactively:
+### 2. Run the container interactively
 ```bash
 docker run -it --rm contact-manager-pro:local
 ```
 
-Quick smoke run without interactive input:
+### 3. Run with host persistence
+To persist the database and audit log across container restarts, mount a host directory to `/app`:
 ```bash
-docker run --rm contact-manager-pro:local
-```
-
-## Project Layout
-```text
-src/main/java/com/example/contacts
-src/test/java/com/example/contacts
-Dockerfile
-.dockerignore
-contacts.csv
-pom.xml
-README.md
+docker run -it --rm -v $(pwd)/data:/app contact-manager-pro:local
 ```
 
 ## Notes
-- The application creates `contacts.csv` automatically if it does not exist.
-- The application appends command history entries to `audit.log`.
-- In this workspace the Docker image was built and smoke-tested successfully.
+- Database and audit log files are generated automatically in the current execution folder.
+- Validation checks require every contact to have at least one phone number or email address.
+- Archived contacts are protected from accidental modifications unless they are explicitly restored first.

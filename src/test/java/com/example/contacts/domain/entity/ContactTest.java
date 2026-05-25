@@ -37,14 +37,43 @@ class ContactTest {
         assertThrows(ValidationException.class, () -> c.removePhone(new PhoneNumber("0671234567")));
     }
 
+    /**
+     * Verifies Issue 3.3 fix: getPhones/getEmails return true immutable snapshots
+     * (List.copyOf) — changes to the returned list must not affect the contact.
+     */
     @Test
-    void searchTokensShouldContainNameAndEmail() {
+    void getPhonesShouldReturnImmutableSnapshot() {
         Contact c = Contact.createNew("Ivan", "Petrenko",
-                List.of(new PhoneNumber("0671234567")),
-                List.of(new Email("ivan@test.com")), null);
+                List.of(new PhoneNumber("0671234567")), List.of(new Email("ivan@test.com")), null);
 
-        assertTrue(c.searchTokens().contains("ivan"));
-        assertTrue(c.searchTokens().contains("petrenko"));
-        assertTrue(c.searchTokens().contains("ivan@test.com"));
+        List<PhoneNumber> snapshot = c.getPhones();
+
+        // The returned list itself must be unmodifiable
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshot.add(new PhoneNumber("0509999999")));
+
+        // The contact's phone count must be unchanged
+        assertEquals(1, c.getPhones().size());
+    }
+
+    @Test
+    void getEmailsShouldReturnImmutableSnapshot() {
+        Contact c = Contact.createNew("Ivan", "Petrenko",
+                List.of(new PhoneNumber("0671234567")), List.of(new Email("ivan@test.com")), null);
+
+        List<Email> snapshot = c.getEmails();
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshot.add(new Email("other@test.com")));
+
+        assertEquals(1, c.getEmails().size());
+    }
+
+    @Test
+    void namesAreTrimmedAndNormalized() {
+        Contact c = Contact.createNew("  Ivan  ", "  Petrenko  ",
+                List.of(new PhoneNumber("0671234567")), List.of(), null);
+        assertEquals("Ivan", c.getFirstName());
+        assertEquals("Petrenko", c.getLastName());
     }
 }
